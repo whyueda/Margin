@@ -1,0 +1,287 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>My Tasks</title>
+<style>
+:root {
+  --bg: #ffffff; --ink: #141416; --ink-2: #5b5c63; --ink-3: #a3a4ac; --line: rgba(20, 22, 40, .11); --fill: rgba(20, 22, 40, .06);
+  --violet: #7c4dea; --violet-bg: #e9defd; --green: #3f8f3a; --green-bg: #dcefd6; --amber: #d69a00; --amber-bg: #ffecb3;
+  --red: #e5484d; --grey-bg: #efeff3; --body: rgba(255, 255, 255, .6);
+  --rim: inset 0 0 0 1px rgba(255, 255, 255, .6), inset 0 1.5px 0 rgba(255, 255, 255, .95);
+  --spring: cubic-bezier(.2, .9, .25, 1.15); --ease: cubic-bezier(.22, .8, .24, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1f; --ink: #f4f4f6; --ink-2: #b6b7bf; --ink-3: #6f7079; --line: #303036; --fill: #26262a;
+    --violet: #b094ff; --violet-bg: #35285a; --green: #86cf7f; --green-bg: #243d22; --amber: #f2c14a; --amber-bg: #4a3a10; --grey-bg: #2b2b30;
+    --body: rgba(20, 20, 23, .58); --line: rgba(255, 255, 255, .13);
+    --rim: inset 0 0 0 1px rgba(255, 255, 255, .12), inset 0 1.5px 0 rgba(255, 255, 255, .2);
+  }
+}
+* { box-sizing: border-box; }
+html { zoom: .78; }
+html, body { height: 100%; margin: 0; overflow: hidden; }
+body {
+  background: var(--body); color: var(--ink); font: 15px/1.4 -apple-system, "SF Pro Text", sans-serif;
+  -webkit-font-smoothing: antialiased; -webkit-user-select: none; cursor: default;
+  display: flex; flex-direction: column; animation: intro .5s var(--ease);
+}
+@keyframes intro { from { opacity: 0; transform: scale(.97); } }
+button, input { font: inherit; color: inherit; border: 0; background: none; outline: 0; padding: 0; margin: 0; }
+svg { display: block; }
+
+body::after { content: ''; position: fixed; inset: 0; border-radius: 28.2px; box-shadow: var(--rim); pointer-events: none; }
+header { padding: 22px 24px 0; flex: none; }
+h1 { margin: 0 0 12px; font-size: 23px; font-weight: 600; letter-spacing: -.025em; }
+.tabs { position: relative; display: flex; gap: 22px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.tab { font-size: 16px; font-weight: 500; color: var(--ink-3); transition: color .25s, transform .25s var(--spring); }
+.tab:hover { color: var(--ink-2); }
+.tab:active { transform: scale(.94); }
+.tab.on { color: var(--ink); }
+.tab sup { font-size: 10px; font-weight: 600; margin-left: 3px; color: var(--red); }
+.ind { position: absolute; bottom: -2px; left: 0; width: 16px; height: 4px; border-radius: 2px; background: var(--ink); transition: transform .45s var(--spring); }
+
+.list { flex: 1; overflow-y: auto; padding: 2px 24px 14px; }
+.list::-webkit-scrollbar { width: 0; }
+.row {
+  display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 7px 0; border-bottom: 1.5px dashed var(--line);
+  animation: rise .42s var(--ease) backwards; overflow: hidden;
+  transition: min-height .34s var(--ease), padding .34s var(--ease), opacity .26s, border-color .3s;
+}
+.row.leaving { min-height: 0; height: 0; padding: 0; opacity: 0; border-color: transparent; }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+
+.orb {
+  position: relative; width: 38px; height: 38px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center;
+  background: var(--tint); color: var(--fg); box-shadow: 0 5px 12px -4px var(--tint), inset 0 0 0 1px rgba(255, 255, 255, .5);
+  transition: transform .3s var(--spring), background .35s, color .35s, box-shadow .35s;
+}
+.orb::before { content: ''; position: absolute; inset: 7px; border-radius: 50%; background: rgba(255, 255, 255, .45); }
+@media (prefers-color-scheme: dark) { .orb::before { background: rgba(255, 255, 255, .08); } .orb { box-shadow: none; } }
+.orb svg { position: relative; }
+button.orb:hover { transform: scale(1.1); }
+button.orb:active { transform: scale(.88); }
+.s-todo { --tint: var(--green-bg); --fg: var(--green); }
+.s-doing { --tint: var(--amber-bg); --fg: var(--amber); }
+.s-done { --tint: var(--violet-bg); --fg: var(--violet); }
+.s-new { --tint: var(--grey-bg); --fg: var(--ink-3); }
+.s-done svg { animation: pop .4s var(--spring); }
+@keyframes pop { from { transform: scale(.3) rotate(-20deg); } }
+
+.txt { flex: 1; min-width: 0; font-size: 15px; position: relative; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3; transition: color .35s; -webkit-user-select: text; }
+.txt[contenteditable=true] { display: block; cursor: text; }
+.row.done .txt { color: var(--violet); text-decoration: line-through; text-decoration-color: var(--violet); }
+.due { font-size: 12px; color: var(--ink-3); flex: none; font-weight: 500; transition: opacity .2s; }
+.due.late { color: var(--red); }
+.acts { display: flex; gap: 2px; flex: none; width: 0; opacity: 0; overflow: hidden; transition: width .28s var(--ease), opacity .2s; }
+.row:hover .acts { width: 54px; opacity: 1; }
+.acts button { width: 26px; height: 26px; border-radius: 9px; color: var(--ink-3); display: flex; align-items: center; justify-content: center; transition: background .15s, color .15s, transform .2s var(--spring); }
+.acts button:hover { background: var(--fill); color: var(--ink); }
+.acts button:active { transform: scale(.85); }
+.acts .on { color: var(--amber); }
+
+.create input.new { flex: 1; min-width: 0; font-size: 15px; cursor: text; }
+.create input.new::placeholder { color: var(--ink-3); transition: color .2s; }
+.create:hover input.new::placeholder { color: var(--ink-2); }
+.create .orb { transition: transform .4s var(--spring), background .3s, color .3s; }
+.create:focus-within .orb { transform: rotate(90deg); --tint: var(--violet-bg); --fg: var(--violet); }
+.create input[type=date] {
+  font-size: 12px; color: var(--ink-2); background: var(--fill); border-radius: 9px; padding: 4px 6px; flex: none;
+  width: 0; opacity: 0; padding-left: 0; padding-right: 0; transition: width .3s var(--ease), opacity .2s, padding .3s;
+}
+.create:focus-within input[type=date], .create.has input[type=date] { width: 118px; opacity: 1; padding: 4px 6px; }
+
+.empty { text-align: center; color: var(--ink-3); padding: 44px 10px; font-size: 14px; animation: rise .5s var(--ease) backwards; }
+.empty button { display: inline-block; margin-top: 12px; height: 34px; padding: 0 16px; border-radius: 17px; background: var(--ink); color: var(--bg); font-weight: 600; font-size: 13px; }
+.grip { position: absolute; right: 0; bottom: 0; width: 22px; height: 22px; cursor: nwse-resize; }
+</style>
+</head>
+<body>
+<header data-drag>
+  <h1 data-drag>My Tasks</h1>
+  <div class="tabs" id="tabs" data-drag>
+    <button class="tab" data-tab="upcoming">Upcoming</button>
+    <button class="tab" data-tab="overdue">Overdue</button>
+    <button class="tab" data-tab="completed">Completed</button>
+    <span class="ind" id="ind"></span>
+  </div>
+</header>
+<div class="list" id="list"></div>
+<div class="grip" id="grip"></div>
+
+<script>
+const api = (cmd, a = {}) => window.webkit.messageHandlers.api.postMessage({ cmd, ...a });
+const $ = s => document.querySelector(s);
+const svg = (d, s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const ICON = {
+  plus: svg('<path d="M12 6v12M6 12h12"/>'),
+  x: svg('<path d="M7 7l10 10M17 7L7 17"/>', 15),
+  done: svg('<path d="M6.500 12.500l3.800 3.800 7.200-8"/>'),
+  todo: svg('<circle cx="12" cy="12" r="8.500" stroke-dasharray="2.200 3.100"/><path d="M8.800 12.300l2.300 2.300 4.200-4.600"/>', 20),
+  doing: svg('<circle cx="12" cy="12" r="8.500" stroke-dasharray="2.200 3.100"/><path d="M10.300 8.800l5 3.200-5 3.200z" fill="currentColor" stroke-width="1.200"/>', 20),
+  play: svg('<path d="M9 6.500l8.500 5.500L9 17.500z"/>', 15),
+};
+
+let tasks = [], tab = 'upcoming', ready = false, busy = false;
+const pad = n => String(n).padStart(2, '0');
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const today = () => iso(new Date());
+
+function parse(text) {
+  return text.split('\n').map(l => {
+    const m = l.match(/^\s*[-*] \[([ xX\/])\] (.*)$/);
+    if (!m) return null;
+    let due = null, done = null;
+    const t = m[2].replace(/\s*📅\s*(\d{4}-\d{2}-\d{2})/, (_, d) => { due = d; return ''; })
+      .replace(/\s*✅\s*(\d{4}-\d{2}-\d{2})/, (_, d) => { done = d; return ''; });
+    return { text: t.trim(), state: m[1].toLowerCase(), due, done };
+  }).filter(Boolean);
+}
+const dump = () => '# My Tasks\n\n' + tasks.map(t =>
+  `- [${t.state}] ${t.text}${t.due ? ' 📅 ' + t.due : ''}${t.done ? ' ✅ ' + t.done : ''}`).join('\n') + '\n';
+const save = () => api('writeTasks', { content: dump() });
+
+async function load() {
+  if (busy) return;
+  try { tasks = parse(await api('readTasks')); ready = true; }
+  catch (e) { ready = false; }
+  render(false);
+}
+
+const isLate = t => t.state !== 'x' && t.due && t.due < today();
+const inTab = (t, name) => name === 'completed' ? t.state === 'x' : name === 'overdue' ? isLate(t) : t.state !== 'x' && !isLate(t);
+
+function dueLabel(d) {
+  const diff = Math.round((new Date(d + 'T00:00') - new Date(today() + 'T00:00')) / 864e5);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Tomorrow';
+  if (diff === -1) return 'Yesterday';
+  return new Date(d + 'T00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function moveInd() {
+  const on = $('.tab.on');
+  if (on) $('#ind').style.transform = `translateX(${on.offsetLeft + on.offsetWidth / 2 - 8}px)`;
+}
+
+function render(animate = true) {
+  document.querySelectorAll('.tab').forEach(b => {
+    b.classList.toggle('on', b.dataset.tab === tab);
+    if (b.dataset.tab === 'overdue') {
+      const n = tasks.filter(isLate).length;
+      b.innerHTML = 'Overdue' + (n ? `<sup>${n}</sup>` : '');
+    }
+  });
+  moveInd();
+  const list = $('#list');
+  list.innerHTML = '';
+  if (!ready) {
+    list.innerHTML = '<div class="empty">Choose a notes folder to start<br>keeping tasks here.<br><button id="setup">Choose folder</button></div>';
+    $('#setup').onclick = () => api('chooseRoot');
+    return;
+  }
+  let n = 0;
+  const delay = row => { if (animate) row.style.animationDelay = Math.min(n++, 10) * 40 + 'ms'; else row.style.animation = 'none'; };
+
+  if (tab === 'upcoming') {
+    const row = document.createElement('div');
+    row.className = 'row create';
+    row.innerHTML = `<span class="orb s-new">${ICON.plus}</span><input class="new" placeholder="Create Task" spellcheck="false"><input type="date" title="Due date">`;
+    const [text, date] = row.querySelectorAll('input');
+    const mark = () => row.classList.toggle('has', !!text.value || !!date.value);
+    text.oninput = mark;
+    date.onchange = mark;
+    const submit = e => {
+      if (e.key === 'Escape') { text.value = ''; date.value = ''; mark(); text.blur(); }
+      if (e.key !== 'Enter' || !text.value.trim()) return;
+      tasks.unshift({ text: text.value.trim(), state: ' ', due: date.value || null, done: null, fresh: true });
+      save();
+      render(false);
+      $('.create input.new').focus();
+    };
+    text.onkeydown = submit;
+    date.onkeydown = submit;
+    delay(row);
+    list.append(row);
+  }
+
+  const shown = tasks.filter(t => inTab(t, tab));
+  if (tab === 'completed') shown.sort((a, b) => (b.done || '').localeCompare(a.done || ''));
+  else shown.sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'));
+
+  if (!shown.length && tab !== 'upcoming') {
+    list.insertAdjacentHTML('beforeend', `<div class="empty">${tab === 'overdue' ? 'Nothing overdue. Nice.' : 'Completed tasks land here.'}</div>`);
+  }
+
+  for (const t of shown) {
+    const row = document.createElement('div');
+    const cls = t.state === 'x' ? 'done' : t.state === '/' ? 'doing' : 'todo';
+    row.className = 'row' + (t.state === 'x' ? ' done' : '');
+    row.innerHTML = `<button class="orb s-${cls}">${ICON[cls]}</button><span class="txt"></span>` +
+      (t.due && t.state !== 'x' ? `<span class="due${isLate(t) ? ' late' : ''}">${dueLabel(t.due)}</span>` : '') +
+      `<span class="acts">${t.state !== 'x' ? `<button class="go${t.state === '/' ? ' on' : ''}" title="In progress">${ICON.play}</button>` : ''}<button class="rm" title="Delete">${ICON.x}</button></span>`;
+    const txt = row.querySelector('.txt');
+    txt.textContent = t.text;
+    const orb = row.querySelector('.orb');
+
+    orb.onclick = () => {
+      busy = true;
+      const done = t.state !== 'x';
+      t.state = done ? 'x' : ' ';
+      t.done = done ? today() : null;
+      save();
+      row.classList.toggle('done', done);
+      orb.className = 'orb s-' + (done ? 'done' : 'todo');
+      orb.innerHTML = ICON[done ? 'done' : 'todo'];
+      setTimeout(() => row.classList.add('leaving'), 750);
+      setTimeout(() => { busy = false; render(false); }, 1100);
+    };
+    const go = row.querySelector('.go');
+    if (go) go.onclick = () => { t.state = t.state === '/' ? ' ' : '/'; save(); render(false); };
+    row.querySelector('.rm').onclick = () => {
+      tasks.splice(tasks.indexOf(t), 1);
+      save();
+      row.classList.add('leaving');
+      setTimeout(() => render(false), 340);
+    };
+    txt.ondblclick = () => {
+      txt.contentEditable = 'true';
+      txt.focus();
+      document.execCommand('selectAll');
+      busy = true;
+      const finish = () => {
+        txt.contentEditable = 'false';
+        busy = false;
+        const v = txt.textContent.trim();
+        if (v && v !== t.text) { t.text = v; save(); }
+        txt.textContent = t.text;
+      };
+      txt.onblur = finish;
+      txt.onkeydown = e => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); if (e.key === 'Escape') txt.textContent = t.text; txt.blur(); } };
+    };
+    if (t.fresh) { delete t.fresh; row.style.animationDelay = '0ms'; } else delay(row);
+    list.append(row);
+  }
+}
+
+$('#tabs').onclick = e => {
+  const b = e.target.closest('.tab');
+  if (!b || b.dataset.tab === tab) return;
+  tab = b.dataset.tab;
+  render();
+};
+
+document.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  if (e.target.id === 'grip') { e.preventDefault(); api('drag', { mode: 'resize' }); return; }
+  if (e.target.closest('[data-drag]') && !e.target.closest('button,input')) { e.preventDefault(); api('drag', { mode: 'move' }); }
+});
+window.addEventListener('resize', moveInd);
+window.addEventListener('focus', load);
+window.onRootChanged = load;
+setInterval(() => { if (!document.activeElement || document.activeElement === document.body) load(); }, 60000);
+load().then(() => render());
+</script>
+</body>
+</html>

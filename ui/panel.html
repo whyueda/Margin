@@ -1,0 +1,125 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Margin</title>
+<link rel="stylesheet" href="panel.css">
+</head>
+<body>
+<div id="app">
+  <div class="glow"></div>
+
+  <section id="welcome" class="view">
+    <header class="bar" data-drag><span class="grow"></span><button class="icon" data-close data-icon="x" title="Close"></button></header>
+    <div class="welcome-body" data-drag>
+      <div class="badge" data-icon="folder" data-size="26"></div>
+      <h1>Where should your notes live?</h1>
+      <p>Pick a folder on your Mac. Every environment becomes a folder inside it, every category a subfolder, and every note a plain <b>.md</b> file.</p>
+      <button class="primary" id="chooseBtn">Choose folder</button>
+    </div>
+  </section>
+
+  <section id="listView" class="view">
+    <header class="bar" data-drag>
+      <button class="envico" id="envIco" title="Change icon"></button>
+      <button class="env" id="envBtn"><span id="envName"></span><span data-icon="chev" data-size="18"></span></button>
+      <span class="grow"></span>
+      <button class="icon" id="setBtn" data-icon="gear" title="Settings  ⌘,"></button>
+      <button class="icon" id="impBtn" data-icon="imp" title="Import files as notes"></button>
+      <button class="icon" id="newBtn" data-icon="plus" title="New note  ⌘N"></button>
+      <button class="icon" data-close data-icon="x" title="Close  esc"></button>
+    </header>
+    <div class="scroll">
+      <div class="head" data-drag>
+        <div class="sub" id="count"></div>
+      </div>
+      <label class="search"><span data-icon="search" data-size="16"></span><input id="search" placeholder="Search  ·  press \ to start typing" spellcheck="false"></label>
+      <div class="chips" id="chips"></div>
+      <div class="notes" id="notes"></div>
+    </div>
+  </section>
+
+  <section id="editorView" class="view">
+    <header class="bar" data-drag>
+      <button class="icon" id="backBtn" data-icon="back" title="All notes · hold for recent notes"></button>
+      <button class="pill" id="catBtn"><span data-icon="folder" data-size="15"></span><span id="catName"></span><span data-icon="chev" data-size="14"></span></button>
+      <span class="grow"></span>
+      <span class="save" id="saveState"></span>
+      <button class="icon" id="moreBtn" data-icon="more" title="More"></button>
+      <button class="icon" data-close data-icon="x" title="Close  esc"></button>
+    </header>
+    <div class="scroll" id="docScroll">
+      <div class="doc">
+        <div class="titlerow"><button class="noteico" id="noteIco" title="Change icon"></button><input id="title" placeholder="Untitled" spellcheck="false"></div>
+        <div class="meta"><span id="noteMeta"></span><button class="addico" id="addIco">Add icon</button></div>
+        <div id="editor" contenteditable="true" spellcheck="false" data-placeholder="Start writing, or paste anything…"></div>
+        <div class="imgbox" id="imgBox">
+          <div class="imgbar"><button data-s="-" title="Smaller">−</button><span id="imgPct"></span><button data-s="+" title="Larger">+</button><button data-s="full">Full</button></div>
+          <i class="imghandle" title="Drag to resize"></i>
+        </div>
+        <div class="tbar" id="tbar">
+          <button data-t="row">+ Row</button><button data-t="col">+ Column</button><button data-t="del" class="danger">Delete</button>
+        </div>
+      </div>
+    </div>
+    <div class="toolbar" id="toolbar">
+      <button class="block" id="blockBtn"><span id="blockName">Text</span><span data-icon="chev" data-size="14"></span></button>
+      <span class="div"></span>
+      <div class="tools" id="tools">
+      <button class="tb" data-cmd="bold" title="Bold  ⌘B"><b>B</b></button>
+      <button class="tb" data-cmd="italic" title="Italic  ⌘I"><i>I</i></button>
+      <button class="tb" data-cmd="underline" title="Underline  ⌘U"><u>U</u></button>
+      <button class="tb" data-cmd="strikeThrough" title="Strikethrough  ⌘⇧X"><s>S</s></button>
+      <span class="div"></span>
+      <button class="tb" id="taskBtn" data-icon="todo" title="Checklist  ⌘⇧L"></button>
+      <button class="tb" id="linkBtn" data-icon="link" title="Link  ⌘K"></button>
+      <button class="tb" id="tableBtn" data-icon="table" title="Table"></button>
+      <button class="tb" id="attachBtn" data-icon="clip" title="Attach file"></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="settingsView" class="view">
+    <header class="bar" data-drag>
+      <button class="icon" id="setBack" data-icon="back" title="Back"></button>
+      <span class="grow"></span>
+      <button class="icon" data-close data-icon="x" title="Close  esc"></button>
+    </header>
+    <div class="scroll">
+      <h1 class="set-title" data-drag>Settings</h1>
+      <div class="label">Shortcut</div>
+      <div class="card">
+        <div class="set-row">
+          <div class="set-text"><b>Show notes</b><div class="keys" id="scKeys"></div><small id="scHint"></small></div>
+          <button class="pill" id="scRec">Change</button>
+        </div>
+      </div>
+      <div class="label">Storage</div>
+      <div class="card">
+        <div class="set-row">
+          <div class="set-text"><b>Notes folder</b><small id="setRoot"></small></div>
+          <button class="pill" id="setFolder">Change…</button>
+        </div>
+      </div>
+      <div class="label">General</div>
+      <div class="card">
+        <div class="set-row"><div class="set-text"><b>Appearance</b><small>Light, dark, or follow your Mac</small></div>
+          <div class="seg" id="themeSeg"><i></i><button data-v="system">Auto</button><button data-v="light">Light</button><button data-v="dark">Dark</button></div></div>
+        <div class="set-row"><div class="set-text"><b>Glow colour</b><small>The soft gradient behind the header. Each environment can have its own: environment menu → ⋯</small><div class="swatches" id="glowSw"></div></div></div>
+        <div class="set-row"><div class="set-text"><b>Keyboard sound</b><small>The kind of keys you hear</small></div><button class="pill" id="sndBtn"><span id="sndName"></span><span data-icon="chev" data-size="14"></span></button></div>
+        <div class="set-row"><div class="set-text"><b>Typing sound</b><small id="typHint"></small></div><input type="range" id="typVol" min="0" max="100" step="5"></div>
+        <div class="set-row"><div class="set-text"><b>Check spelling</b><small>Underlines mistakes; typing is a little slower</small></div><button class="switch" id="swSpell"></button></div>
+        <div class="set-row"><div class="set-text"><b>Tasks widget</b><small>Show My Tasks on the desktop</small></div><button class="switch" id="swWidget"></button></div>
+        <div class="set-row"><div class="set-text"><b>Open at login</b><small>Start Margin when you sign in</small></div><button class="switch" id="swLogin"></button></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="pop" id="pop"></div>
+  <div class="grip" id="grip"></div>
+</div>
+<script src="lucide.js"></script>
+<script src="md.js"></script>
+<script src="panel.js"></script>
+</body>
+</html>
