@@ -864,9 +864,9 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandlerWithRepl
         edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        // Uppercase "V" with ⌘ is ⇧⌘V, the way the system's own menus spell it.
-        let plain = edit.addItem(withTitle: "Paste and Match Style", action: #selector(pastePlain), keyEquivalent: "V")
-        plain.keyEquivalentModifierMask = [.command]
+        // ⌥⌘V pastes the plain text only.
+        let plain = edit.addItem(withTitle: "Paste and Match Style", action: #selector(pastePlain), keyEquivalent: "v")
+        plain.keyEquivalentModifierMask = [.command, .option]
         plain.target = self
         edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = edit
@@ -896,7 +896,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandlerWithRepl
         statusItem.menu = m
     }
 
-    /// ⌘⇧V: the note in the front window pastes the clipboard as plain text.
+    /// ⌥⌘V: the note in the front window pastes the clipboard as plain text.
     @objc func pastePlain() {
         let web = noteWebs.first { $0.window === NSApp.keyWindow } ?? panelWeb
         if testMode { print("[pastePlain]"); fflush(stdout) }
@@ -1408,6 +1408,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandlerWithRepl
             guard environ["MARGIN_TEST_JS"] != nil, let win = web?.window else { return nil }
             var flags: NSEvent.ModifierFlags = [.command]
             if s("mods").contains("shift") { flags.insert(.shift) }
+            if s("mods").contains("option") { flags.insert(.option) }
             guard let ev = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: win.windowNumber,
                                             context: nil, characters: s("key"), charactersIgnoringModifiers: s("key"), isARepeat: false, keyCode: 9) else { return false }
             return NSApp.mainMenu?.performKeyEquivalent(with: ev) ?? false

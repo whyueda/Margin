@@ -1135,7 +1135,7 @@ function insertParsed(html) {
   renderPreviews(true);
 }
 
-// ⌘V keeps the formatting; ⌘⇧V pastes the plain text only.
+// ⌘V keeps the formatting; ⌥⌘V pastes the plain text only.
 editor.addEventListener('paste', e => { e.preventDefault(); pasteInto(false); });
 async function pasteInto(plainText) {
   const r = await api('paste', { env: state.env });
@@ -1162,7 +1162,7 @@ async function pasteInto(plainText) {
   } else if (looksLikeMD(t)) insertParsed(MD.parse(t, ctx()));
   else exec('insertText', t);
 }
-// Called by the app's Edit ▸ Paste and Match Style (⌘⇧V).
+// Called by the app's Edit ▸ Paste and Match Style (⌥⌘V).
 window.pastePlain = () => {
   const a = document.activeElement;
   if (a === editor || editor.contains(a)) return pasteInto(true);
