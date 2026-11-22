@@ -7,7 +7,10 @@ VERSION=$(sed -n 's/.*CFBundleShortVersionString<\/key><string>\([^<]*\).*/\1/p'
 NAME="Margin"
 OUT="dist/$NAME-$VERSION.dmg"
 WORK=$(mktemp -d)
-trap 'hdiutil detach "$WORK/mnt" -quiet -force 2>/dev/null || true; rm -rf "$WORK"' EXIT
+MNT=""
+trap '[ -n "$MNT" ] && hdiutil detach "$MNT" -quiet -force 2>/dev/null; rm -rf "$WORK"' EXIT
+# Finder only lays out a disk mounted in /Volumes, under the name the installer window shows.
+if [ -e "/Volumes/$NAME" ]; then echo "Eject the disk named \"$NAME\" first (it is in the way)."; exit 1; fi
 
 echo "Building $NAME $VERSION for Apple silicon and Intel…"
 APP="$WORK/stage/$NAME.app" UNIVERSAL=1 ./build.sh >/dev/null
@@ -22,14 +25,14 @@ ln -s /Applications "$WORK/stage/Applications"
 
 echo "Making the disk image…"
 hdiutil create -quiet -srcfolder "$WORK/stage" -volname "$NAME" -fs HFS+ -format UDRW -size 60m "$WORK/rw.dmg"
-mkdir "$WORK/mnt"
-hdiutil attach -quiet -readwrite -noverify -noautoopen -mountpoint "$WORK/mnt" "$WORK/rw.dmg"
-SetFile -a V "$WORK/mnt/.background"
+MNT=$(hdiutil attach -readwrite -noverify -noautoopen "$WORK/rw.dmg" 2>/dev/null | awk -F'\t' '/\/Volumes\//{print $NF}')
+[ "$MNT" = "/Volumes/$NAME" ] || { echo "The disk image mounted at an unexpected place: $MNT"; exit 1; }
+SetFile -a V "$MNT/.background"
 
 # Window layout (icon places, size, background). Finder writes it into the image's .DS_Store.
 if osascript <<OSA
 tell application "Finder"
-  set d to (POSIX file "$WORK/mnt" as alias)
+  set d to disk "$NAME"
   open d
   delay 2
   set w to container window of d
@@ -59,15 +62,15 @@ then echo "Window layout set."
 else echo "Note: Finder would not lay out the window (Automation permission?); the image still works, just without the background."
 fi
 # The disk's own icon goes in last: Finder removes it while laying out the window.
-cp AppIcon.icns "$WORK/mnt/.VolumeIcon.icns"
-SetFile -a V "$WORK/mnt/.VolumeIcon.icns"
-SetFile -a C "$WORK/mnt"
+cp AppIcon.icns "$MNT/.VolumeIcon.icns"
+SetFile -a V "$MNT/.VolumeIcon.icns"
+SetFile -a C "$MNT"
 sync
 sleep 1
 LSREG=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 # Finder registers the app it just showed; forget that copy so only the installed one is known.
-"$LSREG" -u "$WORK/mnt/$NAME.app" >/dev/null 2>&1 || true
-hdiutil detach -quiet "$WORK/mnt"
+"$LSREG" -u "$MNT/$NAME.app" >/dev/null 2>&1 || true
+hdiutil detach -quiet "$MNT"
 
 mkdir -p dist
 rm -f "$OUT"
