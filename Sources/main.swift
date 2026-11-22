@@ -594,6 +594,26 @@ final class WebView: WKWebView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
+// MARK: - Log (shown in Copy Diagnostics)
+
+let logURL = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Margin/margin.log")
+
+/// Appends one line to Margin's log, keeping only its last ~200 KB.
+func marginLog(_ line: String) {
+    guard !testMode else { print("[log]", line); return }
+    let stamp = ISO8601DateFormatter().string(from: Date())
+    let data = Data("\(stamp) \(line)\n".utf8)
+    if let h = try? FileHandle(forWritingTo: logURL) {
+        h.seekToEndOfFile(); h.write(data); try? h.close()
+    } else {
+        try? data.write(to: logURL)
+    }
+    if let size = (try? fm.attributesOfItem(atPath: logURL.path))?[.size] as? Int, size > 200_000,
+       let all = try? Data(contentsOf: logURL) {
+        try? all.suffix(100_000).write(to: logURL)
+    }
+}
+
 // MARK: - Updates
 
 /// Looks at the newest release on GitHub about once a day and offers a newer version's installer.
@@ -772,6 +792,8 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandlerWithRepl
     var hotkeyTimer: Timer?
     var napGuard: NSObjectProtocol?
     var hotkeyActivity: NSObjectProtocol?
+    /// When the key check last saw a modifier key held, and which (for Copy Diagnostics).
+    var lastModsSeen: (at: Date, keys: [String])?
 
     var uiDir: URL {
         if let p = environ["MARGIN_UI"] { return URL(fileURLWithPath: p) }
@@ -779,6 +801,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandlerWithRepl
     }
 
     func applicationDidFinishLaunching(_ n: Notification) {
+        marginLog("Launched Margin \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") on macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
         applyTheme()
         buildMenus()
         buildPanel()
@@ -808,6 +831,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandlerWithRepl
 
     func pollHotkey() {
         let down = Set(App.mods.map { $0.0 }.filter { CGEventSource.keyState(.combinedSessionState, key: CGKeyCode($0)) })
+        if !down.isEmpty { lastModsSeen = (Date(), labels(down)) }
         if recording {
             if down != lastDown {
                 lastDown = down
@@ -895,6 +919,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandlerWithRepl
         loginItem = m.addItem(withTitle: "Open at Login", action: #selector(toggleLogin), keyEquivalent: "")
         loginItem.target = self
         m.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "").target = self
+        m.addItem(withTitle: "Copy Diagnostics", action: #selector(copyDiagnostics), keyEquivalent: "").target = self
         m.addItem(.separator())
         m.addItem(withTitle: "Quit Margin", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
         statusItem.menu = m
@@ -958,6 +983,55 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandlerWithRepl
 
     @objc func menuToggle() { togglePanel() }
     @objc func checkForUpdates() { updater.check(manual: true) }
+
+    /// Copies a plain-text report of what Margin can and can't do on this Mac, to paste into a message.
+    @objc func copyDiagnostics() {
+        let home = { (p: String) in (p as NSString).abbreviatingWithTildeInPath }
+        let info = Bundle.main.infoDictionary ?? [:]
+        var l: [String] = []
+        l.append("Margin \(info["CFBundleShortVersionString"] as? String ?? "?") (\(info["CFBundleVersion"] as? String ?? "?"))")
+        l.append("macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
+        var u = utsname(); uname(&u)
+        let machine = withUnsafeBytes(of: &u.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+        var translated: Int32 = 0; var size = MemoryLayout<Int32>.size
+        sysctlbyname("sysctl.proc_translated", &translated, &size, nil, 0)
+        l.append("Mac: \(machine)\(translated == 1 ? " (running under Rosetta)" : "")")
+        l.append("WebKit: \(Bundle(identifier: "com.apple.WebKit")?.infoDictionary?["CFBundleVersion"] as? String ?? "?")")
+        let path = Bundle.main.bundlePath
+        l.append("App at: \(home(path))\(path.contains("/AppTranslocation/") ? "  (macOS is running it from a temporary read-only copy)" : "")")
+        if let r = store.root {
+            var isDir: ObjCBool = false
+            let exists = fm.fileExists(atPath: r.path, isDirectory: &isDir)
+            l.append("Notes folder: \(home(r.path))  exists: \(exists && isDir.boolValue)  writable: \(fm.isWritableFile(atPath: r.path))")
+            l.append("Environments: \(store.envs().joined(separator: ", "))  current: \(store.currentEnv)")
+        } else {
+            l.append("Notes folder: none chosen yet")
+        }
+        l.append("Shortcut: \(labels(Set(store.shortcut)).joined(separator: " + "))")
+        if let s = lastModsSeen {
+            l.append("Last modifier keys seen: \(s.keys.joined(separator: " + ")), \(Int(Date().timeIntervalSince(s.at)))s ago")
+        } else {
+            l.append("Last modifier keys seen: never since launch")
+        }
+        l.append("Accessibility allowed: \(AXIsProcessTrusted())  Input Monitoring allowed: \(CGPreflightListenEventAccess())")
+        panelWeb.evaluateJavaScript("[typeof MD, typeof newNote, typeof state === 'object' && state ? (state.view || '') : 'none', navigator.userAgent].join(' | ')") { r, err in
+            l.append("Page: \(r as? String ?? "not answering (\(err?.localizedDescription ?? "?"))")")
+            l.append("")
+            l.append("Recent log:")
+            let log = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+            l.append(contentsOf: log.split(separator: "\n").suffix(40).map(String.init))
+            if log.isEmpty { l.append("(empty)") }
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(l.joined(separator: "\n"), forType: .string)
+            let a = NSAlert()
+            a.messageText = "Diagnostics copied"
+            a.informativeText = "Paste them into a message to whoever helps you with Margin. They include your macOS version and where your notes folder is, but none of your notes."
+            if testMode { print("DIAG:\n" + l.joined(separator: "\n")); return }
+            NSApp.activate(ignoringOtherApps: true)
+            a.runModal()
+        }
+    }
     @objc func downloadUpdate() { updater.download() }
     @objc func newNote() {
         if !panel.isVisible { showPanel() }
@@ -1254,13 +1328,17 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandlerWithRepl
             return
         }
         do { replyHandler(try handle(cmd, body, message.webView), nil) }
-        catch { replyHandler(nil, error.localizedDescription) }
+        catch {
+            marginLog("\(cmd) failed: \(error.localizedDescription)")
+            replyHandler(nil, error.localizedDescription)
+        }
     }
 
     func handle(_ cmd: String, _ a: [String: Any], _ web: WKWebView?) throws -> Any? {
         let s = { (k: String) -> String in a[k] as? String ?? "" }
         switch cmd {
         case "state": return state()
+        case "log": marginLog(s("msg")); return nil
         case "chooseRoot": chooseRoot(); return state()
         case "revealRoot": revealRoot(); return nil
         case "setEnv":
@@ -1407,6 +1485,10 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandlerWithRepl
                 }
             }
             return at
+        case "testDiagnostics":
+            guard environ["MARGIN_TEST_JS"] != nil else { return nil }
+            copyDiagnostics()
+            return nil
         case "testMenu":
             // Test aid: a menu shortcut, as the menu bar would receive it.
             guard environ["MARGIN_TEST_JS"] != nil, let win = web?.window else { return nil }

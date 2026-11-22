@@ -332,6 +332,7 @@ $('#envBtn').ondblclick = () => {
       await loadNotes();
     } catch (err) {
       btn.title = String(err.message || err);
+      if (window.showError) showError('Couldn\'t rename: ' + btn.title);
       btn.classList.add('shake');
       setTimeout(() => { btn.classList.remove('shake'); btn.title = ''; }, 2500);
     }
