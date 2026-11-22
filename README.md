@@ -10,7 +10,8 @@ Margin checks for a newer release once a day and offers it from the menu bar ico
 ## Build
 
 ```bash
-./build.sh            # builds .build/Margin.app
+./install.sh          # builds Margin, replaces /Applications/Margin.app and opens it
+./build.sh            # only builds .build/Margin.app
 ./make_installer.sh   # builds dist/Margin-<version>.dmg
 ```
 
