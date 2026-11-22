@@ -24,14 +24,15 @@ const MD = (() => {
 
   // ---------- Markdown -> HTML ----------
 
+  // No lookbehind assertions here: older Safari engines (before 16.4, e.g. early macOS 13) reject the whole file.
   function emph(s) {
     return s
-      .replace(/\*\*\*(?=\S)([\s\S]+?)(?<=\S)\*\*\*/g, '<strong><em>$1</em></strong>')
-      .replace(/\*\*(?=\S)([\s\S]+?)(?<=\S)\*\*/g, '<strong>$1</strong>')
-      .replace(/(?<![\w])__(?=\S)([\s\S]+?)(?<=\S)__(?![\w])/g, '<strong>$1</strong>')
-      .replace(/\*(?=\S)([^*]+?)(?<=\S)\*/g, '<em>$1</em>')
-      .replace(/(?<![\w])_(?=\S)([^_]+?)(?<=\S)_(?![\w])/g, '<em>$1</em>')
-      .replace(/~~(?=\S)([\s\S]+?)(?<=\S)~~/g, '<s>$1</s>');
+      .replace(/\*\*\*(\S(?:[\s\S]*?\S)??)\*\*\*/g, '<strong><em>$1</em></strong>')
+      .replace(/\*\*(\S(?:[\s\S]*?\S)??)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|\W)__(\S(?:[\s\S]*?\S)??)__(?!\w)/g, '$1<strong>$2</strong>')
+      .replace(/\*([^*\s](?:[^*]*?[^*\s])??)\*/g, '<em>$1</em>')
+      .replace(/(^|\W)_([^_\s](?:[^_]*?[^_\s])??)_(?!\w)/g, '$1<em>$2</em>')
+      .replace(/~~(\S(?:[\s\S]*?\S)??)~~/g, '<s>$1</s>');
   }
 
   function inline(src, ctx) {
@@ -94,7 +95,9 @@ const MD = (() => {
     return build(items[0].indent);
   }
 
-  const cells = row => row.trim().replace(/^\|/, '').replace(/\|$/, '').split(/(?<!\\)\|/).map(c => c.trim());
+  // Splits on | unless escaped as \|, without a lookbehind (older Safari engines reject those).
+  const splitPipes = s => { const out = []; let cur = ''; for (let i = 0; i < s.length; i++) { if (s[i] === '|' && s[i - 1] !== '\\') { out.push(cur); cur = ''; } else cur += s[i]; } out.push(cur); return out; };
+  const cells = row => splitPipes(row.trim().replace(/^\|/, '').replace(/\|$/, '')).map(c => c.trim());
 
   function blocks(lines, ctx) {
     let out = '', i = 0;

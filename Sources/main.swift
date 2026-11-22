@@ -771,6 +771,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandlerWithRepl
     var dragMonitor: Any?
     var hotkeyTimer: Timer?
     var napGuard: NSObjectProtocol?
+    var hotkeyActivity: NSObjectProtocol?
 
     var uiDir: URL {
         if let p = environ["MARGIN_UI"] { return URL(fileURLWithPath: p) }
@@ -797,6 +798,9 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandlerWithRepl
         let t = Timer(timeInterval: 0.03, repeats: true) { [weak self] _ in self?.pollHotkey() }
         RunLoop.main.add(t, forMode: .common)
         hotkeyTimer = t
+        // Without Accessibility permission the system doesn't report modifier keys to other apps, so the timer is
+        // what sees the shortcut. Keep App Nap from slowing it to every few seconds while the window is hidden.
+        hotkeyActivity = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep], reason: "Watching for the show-notes shortcut")
 
         if store.root == nil || (testMode && environ["MARGIN_HIDDEN"] == nil) { showPanel() }
         if !testMode { updater.start() }
