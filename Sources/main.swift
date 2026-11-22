@@ -165,7 +165,7 @@ final class Store {
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let t = clean(title)
         let u = unique(dir, t.isEmpty ? "Untitled" : t, "md")
-        try "".write(to: u, atomically: true, encoding: .utf8)
+        try saveText("", to: u)
         return try noteInfo(u, preview: false)
     }
 
@@ -234,13 +234,13 @@ final class Store {
         let t = clean(ns.deletingPathExtension)
         let u = unique(dir, t.isEmpty ? "Untitled" : t, "md")
         if ["md", "markdown", "mdown", "txt", "text", ""].contains(ext), let text = String(data: data, encoding: .utf8) {
-            try text.write(to: u, atomically: true, encoding: .utf8)
+            try saveText(text, to: u)
         } else {
             let info = try saveAsset(data, name: name, env: env)
             let rel = info["rel"] as? String ?? ""
             let label = name.replacingOccurrences(of: "[", with: "(").replacingOccurrences(of: "]", with: ")")
             let body = (info["image"] as? Bool ?? false) ? "![\(label)](\(rel))\n" : "[📎 \(label)](\(rel))\n"
-            try body.write(to: u, atomically: true, encoding: .utf8)
+            try saveText(body, to: u)
         }
         return try noteInfo(u, preview: false)
     }
@@ -598,19 +598,49 @@ final class WebView: WKWebView {
 
 let logURL = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Margin/margin.log")
 
+/// The last log lines, kept in memory too, so Copy Diagnostics shows them even if the log file can't be written.
+var recentLog: [String] = []
+
 /// Appends one line to Margin's log, keeping only its last ~200 KB.
 func marginLog(_ line: String) {
-    guard !testMode else { print("[log]", line); return }
     let stamp = ISO8601DateFormatter().string(from: Date())
+    recentLog.append("\(stamp) \(line)")
+    if recentLog.count > 40 { recentLog.removeFirst(recentLog.count - 40) }
+    guard !testMode else { print("[log]", line); return }
+    NSLog("Margin: %@", line)
     let data = Data("\(stamp) \(line)\n".utf8)
-    if let h = try? FileHandle(forWritingTo: logURL) {
-        h.seekToEndOfFile(); h.write(data); try? h.close()
-    } else {
-        try? data.write(to: logURL)
+    do {
+        let h = try FileHandle(forWritingTo: logURL)
+        try h.seekToEnd(); try h.write(contentsOf: data); try h.close()
+    } catch {
+        do { try data.write(to: logURL) } catch { recentLog.append("\(stamp) (log file not writable: \(describe(error)))") }
     }
     if let size = (try? fm.attributesOfItem(atPath: logURL.path))?[.size] as? Int, size > 200_000,
        let all = try? Data(contentsOf: logURL) {
         try? all.suffix(100_000).write(to: logURL)
+    }
+}
+
+/// An error with the details that tell its cause apart: the system's own domain and code, and the POSIX code under it
+/// (1 = EPERM, blocked by a macOS privacy rule or security software; 13 = EACCES, the file's own permissions).
+func describe(_ error: Error) -> String {
+    let e = error as NSError
+    var s = "\(e.localizedDescription) [\(e.domain) \(e.code)"
+    if let u = e.userInfo[NSUnderlyingErrorKey] as? NSError {
+        s += "; \(u.domain) \(u.code)"
+        if u.domain == NSPOSIXErrorDomain, let c = strerror(Int32(u.code)) { s += " \(String(cString: c))" }
+    }
+    return s + "]"
+}
+
+/// Saves text, normally in one step (written aside, then swapped in). If the system refuses that, saves it directly instead.
+func saveText(_ text: String, to url: URL) throws {
+    do { try text.write(to: url, atomically: true, encoding: .utf8) }
+    catch let first {
+        do {
+            try text.write(to: url, atomically: false, encoding: .utf8)
+            marginLog("saved \(url.lastPathComponent) directly; the one-step save failed: \(describe(first))")
+        } catch { throw first }
     }
 }
 
@@ -984,6 +1014,46 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandlerWithRepl
     @objc func menuToggle() { togglePanel() }
     @objc func checkForUpdates() { updater.check(manual: true) }
 
+    /// Tries each kind of file change Margin makes, in the notes folder and elsewhere, and reports the exact error for each.
+    func writeTest() -> [String] {
+        var out = ["Write test:"]
+        func run(_ name: String, _ f: () throws -> Void) {
+            do { try f(); out.append("  \(name): ok") } catch { out.append("  \(name): FAILED \(describe(error))") }
+        }
+        let places: [(String, URL)] = [
+            ("notes folder", store.root),
+            ("environment", store.root.flatMap { r in store.currentEnv.isEmpty ? nil : r.appendingPathComponent(store.currentEnv) }),
+            ("Margin's settings folder", logURL.deletingLastPathComponent()),
+            ("temporary folder", fm.temporaryDirectory),
+        ].compactMap { n, u in u.map { (n, $0) } }
+        for (name, dir) in places {
+            out.append(" in \(name) (\((dir.path as NSString).abbreviatingWithTildeInPath)):")
+            let tag = ".margin-write-test-\(ProcessInfo.processInfo.processIdentifier)"
+            let file = dir.appendingPathComponent(tag + ".md"), moved = dir.appendingPathComponent(tag + "-renamed.md")
+            let sub = dir.appendingPathComponent(tag + "-folder")
+            run("create folder") { try fm.createDirectory(at: sub, withIntermediateDirectories: false) }
+            run("save file directly") { try "test".write(to: file, atomically: false, encoding: .utf8) }
+            run("save file in one step") { try "test".write(to: file, atomically: true, encoding: .utf8) }
+            run("rename file") { try fm.moveItem(at: file, to: moved) }
+            try? fm.removeItem(at: file); try? fm.removeItem(at: moved); try? fm.removeItem(at: sub)
+        }
+        run("append to log") {
+            let h = try FileHandle(forWritingTo: logURL); try h.seekToEnd(); try h.write(contentsOf: Data()); try h.close()
+        }
+        return out
+    }
+
+    static func signatureSummary() -> String {
+        var code: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(Bundle.main.bundleURL as CFURL, [], &code) == errSecSuccess, let c = code else { return "unreadable" }
+        var info: CFDictionary?
+        SecCodeCopySigningInformation(c, SecCSFlags(rawValue: kSecCSSigningInformation), &info)
+        let d = info as? [String: Any] ?? [:]
+        let team = d[kSecCodeInfoTeamIdentifier as String] as? String
+        let valid = SecStaticCodeCheckValidity(c, [], nil) == errSecSuccess
+        return "\(team.map { "team " + $0 } ?? "ad-hoc (no developer certificate)"), \(valid ? "valid" : "INVALID")"
+    }
+
     /// Copies a plain-text report of what Margin can and can't do on this Mac, to paste into a message.
     @objc func copyDiagnostics() {
         let home = { (p: String) in (p as NSString).abbreviatingWithTildeInPath }
@@ -1014,13 +1084,18 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandlerWithRepl
             l.append("Last modifier keys seen: never since launch")
         }
         l.append("Accessibility allowed: \(AXIsProcessTrusted())  Input Monitoring allowed: \(CGPreflightListenEventAccess())")
+        l.append("Code signature: \(Self.signatureSummary())")
+        l.append(contentsOf: writeTest())
         panelWeb.evaluateJavaScript("[typeof MD, typeof newNote, typeof state === 'object' && state ? (state.view || '') : 'none', navigator.userAgent].join(' | ')") { r, err in
             l.append("Page: \(r as? String ?? "not answering (\(err?.localizedDescription ?? "?"))")")
             l.append("")
             l.append("Recent log:")
             let log = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
             l.append(contentsOf: log.split(separator: "\n").suffix(40).map(String.init))
-            if log.isEmpty { l.append("(empty)") }
+            if log.isEmpty { l.append("(log file empty or unreadable)") }
+            l.append("")
+            l.append("Since this launch (kept in memory):")
+            l.append(contentsOf: recentLog.isEmpty ? ["(nothing)"] : recentLog)
             let pb = NSPasteboard.general
             pb.clearContents()
             pb.setString(l.joined(separator: "\n"), forType: .string)
@@ -1329,7 +1404,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandlerWithRepl
         }
         do { replyHandler(try handle(cmd, body, message.webView), nil) }
         catch {
-            marginLog("\(cmd) failed: \(error.localizedDescription)")
+            marginLog("\(cmd) failed: \(describe(error))")
             replyHandler(nil, error.localizedDescription)
         }
     }
@@ -1378,7 +1453,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandlerWithRepl
         case "create": return try store.create(env: s("env"), category: s("category"), title: s("title"))
         case "read": return try String(contentsOf: try store.resolve(s("path")), encoding: .utf8)
         case "write":
-            try s("content").write(to: try store.resolve(s("path")), atomically: true, encoding: .utf8)
+            try saveText(s("content"), to: try store.resolve(s("path")))
             return nil
         case "rename", "move":
             let r = cmd == "rename" ? try store.rename(path: s("path"), title: s("title")) : try store.move(path: s("path"), category: s("category"))
@@ -1588,7 +1663,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandlerWithRepl
             let u = try store.base().appendingPathComponent("Tasks.md")
             return (try? String(contentsOf: u, encoding: .utf8)) ?? ""
         case "writeTasks":
-            try s("content").write(to: try store.base().appendingPathComponent("Tasks.md"), atomically: true, encoding: .utf8)
+            try saveText(s("content"), to: try store.base().appendingPathComponent("Tasks.md"))
             return nil
         case "hide":
             if let web, web !== panelWeb { closeExtra(web) } else { hidePanel() }
